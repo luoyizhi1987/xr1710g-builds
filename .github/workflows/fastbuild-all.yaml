@@ -33,7 +33,6 @@ jobs:
           title: Build
     env:
       HOST_WORK_DIR: ${{github.workspace}}
-      BUILD_MODE: ${{matrix.mode}}
       BUILD_TARGET: ${{matrix.target}}
 
     steps:
