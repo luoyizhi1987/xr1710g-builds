@@ -107,7 +107,6 @@ jobs:
         eval "declare -a MOUNT_OPTS=( $(printf '%b' "${BUILDER_MOUNT_OPTS//%/\\x}") )"
         if [ "x${OPT_REBUILD}" != "x1" ]; then
           pull_image "${BUILDER_IMAGE_ID_INC}"
-          squash_image_when_necessary "${BUILDER_IMAGE_ID_INC}"
           docker run -d -t --name "${BUILDER_CONTAINER_ID}" "${MOUNT_OPTS[@]}" --env GITHUB_ENV=${GITHUB_ENV} "${BUILDER_IMAGE_ID_INC}"
         else
           docker run -d -t --name "${BUILDER_CONTAINER_ID}" "${MOUNT_OPTS[@]}" --env GITHUB_ENV=${GITHUB_ENV} "${BUILDER_IMAGE_ID_BUILDENV}"
@@ -191,9 +190,6 @@ jobs:
         docker container rm -fv "${BUILDER_CONTAINER_ID}"
         docker container prune -f
         docker system prune -f --volumes
-        if [ "x${OPT_REBUILD}" != 'x1' ]; then
-          squash_image_when_necessary "${BUILDER_IMAGE_ID_INC}"
-        fi
         docker push "${BUILDER_IMAGE_ID_INC}"
         if [ "x${OPT_REBUILD}" = "x1" ]; then
           create_remote_tag_alias "${BUILDER_IMAGE_ID_INC}" "${BUILDER_IMAGE_ID_BASE}"
