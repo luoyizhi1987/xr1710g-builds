@@ -1,5 +1,5 @@
---- /target/linux/airoha/dts/an7581-xr1710g-ubi.dts
-+++ /target/linux/airoha/dts/an7581-xr1710g-ubi.dts
+--- target/linux/airoha/dts/an7581-xr1710g-ubi.dts
++++ target/linux/airoha/dts/an7581-xr1710g-ubi.dts
 @@ -0,0 +1,435 @@
 +// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
 +
