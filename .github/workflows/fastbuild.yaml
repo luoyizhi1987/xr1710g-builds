@@ -1,4 +1,4 @@
-name: fastbuild ubi2-oc, ubi2, snapshot
+name: xr1710g-oc
 on: workflow_dispatch
 permissions: {contents: write, packages: write, actions: write}
 env:
