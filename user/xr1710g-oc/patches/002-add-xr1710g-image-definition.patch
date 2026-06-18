@@ -1,5 +1,5 @@
---- a/target/linux/airoha/image/an7581.mk
-+++ b/target/linux/airoha/image/an7581.mk
+--- /target/linux/airoha/image/an7581.mk
++++ /target/linux/airoha/image/an7581.mk
 @@ -120,6 +120,37 @@
    SOC := an7581
  endef
