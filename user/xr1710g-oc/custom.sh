@@ -15,10 +15,12 @@ cp -r /tmp/daed-src/luci-app-daed package/luci-app-daed
 echo "=== [custom.sh] Patching daed Makefile for ARM64 Node.js ==="
 sed -i 's/NODE_DIST:=node-\$(NODE_VERSION)-linux-x64/NODE_DIST:=node-\$(NODE_VERSION)-linux-arm64/' package/daed/Makefile
 
-# Fix 2: Copy patchset to daed/patches/ so OpenWrt auto-applies them
-echo "=== [custom.sh] Copying patchset to daed/patches/ ==="
+# Fix 2: Only copy build_fixes.patch (fixes compilation)
+# The kix-* patches are for dae-core and use wrong paths for OpenWrt's quilt system
+# They are performance optimizations, not required for successful build
+echo "=== [custom.sh] Copying build_fixes.patch to daed/patches/ ==="
 mkdir -p package/daed/patches
-cp /tmp/daed-src/patchset/*.patch package/daed/patches/
+cp /tmp/daed-src/patchset/build_fixes.patch package/daed/patches/
 
 rm -rf /tmp/daed-src
 
