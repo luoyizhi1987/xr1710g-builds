@@ -1,0 +1,198 @@
+name: fastbuild xr1710g-oc
+on:
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force clean rebuild (ignore Docker cache)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+permissions: {contents: write, packages: write, actions: write}
+env:
+  GH_TOKEN: ${{ github.token }}
+  CID: ${{ github.event.repository.name }}
+  GH_PAGES: https://w1700k.github.io/builds/
+  BLDROOT: ghcr.io/w1700k/fastbuild_base:debian-arm
+  DK_OPENWRT: /home/builder/openwrt
+  DK_BIN: /home/builder/openwrt_bin
+  DK_USER: /home/builder/user
+  DK_PROFILE: /home/builder/user/current
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix: {target: [xr1710g-oc]}
+    defaults:
+      run:
+        shell: bash -eo pipefail {0}
+    steps:
+    - uses: actions/checkout@v6
+      with: {fetch-depth: 0}
+
+    - uses: actions/cache/restore@v5
+      with: {path: ghcache, key: 'ccache-${{ matrix.target }}', restore-keys: ccache-}
+
+    - uses: actions/cache/restore@v5
+      with: {path: dlcache, key: dlcache}
+
+    - name: Initialize environment
+      run: |
+        mkdir -p user/default/files/etc/apk/repositories.d user/current openwrt_bin ghcache dlcache
+        curl -Z -Lo user/default/files/etc/vermagic.txt ${GH_PAGES}vermagic.txt \
+          -Lo user/default/files/etc/apk/repositories.d/distfeeds.list ${GH_PAGES}distfeeds.list
+        sudo tee /etc/docker/daemon.json <<< '{"max-concurrent-downloads":50,"max-concurrent-uploads":50,"experimental":true}'
+        sudo systemctl reload docker
+        docker login ghcr.io -u "${{ github.actor }}" --password-stdin <<< "$GH_TOKEN"
+        [ -d "user/${{ matrix.target }}" ] || { echo "::error::Target ${{ matrix.target }} not found"; exit 1; }
+        rsync -aI user/default/. user/current/ 2>/dev/null
+        rsync -aI "user/${{ matrix.target }}/" user/current/
+        echo CONFIG_VERSION_NUMBER=${{ matrix.target }} > user/current/cvn.config
+        [ -f user/current/config.diff ] || { echo "::error::config.diff not found"; exit 1; }
+        echo 'CONFIG_CCACHE_DIR="/ghcache"' >> user/current/config.diff
+        install -m 755 /dev/stdin /usr/local/bin/docker_exec <<'DKR'
+        #!/bin/bash
+        for n in DK_BIN DK_USER DK_PROFILE DK_OPENWRT REBUILD; do e+=(-e "$n=${!n}"); done
+        exec docker exec -u 0 -i "${e[@]}" "$@"
+        DKR
+
+    - name: Prepare builder container
+      run: |
+        IMG_BASE="ghcr.io/${{ github.repository_owner }}/$CID:${{ matrix.target }}"
+        IMG_INC="$IMG_BASE-inc"
+        FORCE_REBUILD="${{ github.event.inputs.force_rebuild }}"
+        if [ "$FORCE_REBUILD" = "true" ] || ! docker buildx imagetools inspect "$IMG_INC" >/dev/null 2>&1 && \
+           ! docker buildx imagetools inspect "$IMG_BASE" >/dev/null 2>&1; then
+          REBUILD=1; IMAGE=$BLDROOT
+          echo "=== Using fresh base image (REBUILD=1) ==="
+        else
+          pull() { local out; out=$(docker pull "$1" 2>&1) || { [[ $out == *"max depth exceeded"* ]] && { echo "::error::Image exceeded layer limit" >&2; exit 1; }; return 1; }; }
+          pull "$IMG_INC" || pull "$IMG_BASE" ||:
+          IMAGE=$IMG_INC
+          docker inspect "$IMAGE" >/dev/null 2>&1 || IMAGE=$IMG_BASE
+          echo "=== Using cached image: $IMAGE ==="
+        fi
+        docker run -d -t --name $CID -v $PWD/user:$DK_USER -v $PWD/openwrt_bin:$DK_BIN -v $PWD/dlcache:/dlcache -v $PWD/ghcache:/ghcache --env GITHUB_ENV=$GITHUB_ENV $IMAGE
+        docker_exec $CID bash -c 'sudo -E apt-get -qq update && sudo -E apt-get -qq install -y --no-upgrade build-essential clang llvm curl flex bison g++ gawk gcc gettext git libncurses5-dev libssl-dev python3-distutils-extra rsync swig unzip zlib1g-dev file wget golang pahole xz-utils'
+        printf '%s\n' "REBUILD=$REBUILD" "IMG_BASE=$IMG_BASE" "IMG_INC=$IMG_INC" >> $GITHUB_ENV
+
+    - name: Prepare OpenWrt source
+      run: |
+        docker_exec $CID bash -c '
+          source $DK_USER/default/settings.ini 2>/dev/null ||:
+          source $DK_PROFILE/settings.ini
+          [[ $REPO_URL && $REPO_BRANCH ]] || { echo "::error::Missing REPO_URL or REPO_BRANCH"; exit 1; }
+          export REPO_URL REPO_BRANCH
+          if ((! REBUILD)) && [ -d $DK_OPENWRT/.git ]; then
+            cd $DK_OPENWRT
+          else
+            mkdir -p $DK_OPENWRT/files
+            cd $DK_OPENWRT
+            git init
+          fi
+          git remote set-url origin $REPO_URL 2>/dev/null || git remote add origin $REPO_URL
+          git fetch
+          git checkout -- . 2>/dev/null || true
+          git clean -fd 2>/dev/null || true
+          git checkout $REPO_BRANCH
+          git reset --hard origin/$REPO_BRANCH
+          { git log origin/main..$REPO_BRANCH --oneline || echo "(no commits ahead of main)"; } > files/build_info
+          cp files/build_info $DK_BIN 2>/dev/null ||:
+          mountpoint $DK_BIN || { echo "::error::not mounted" >&2; exit 1; }
+          [ "$(readlink bin)" = $DK_BIN ] 2>/dev/null || { rm -rf bin; ln -sf $DK_BIN bin; }
+          bp="$DK_PROFILE"
+          fc=feeds.conf
+          [ -f $bp/files/$fc ] && cp $bp/files/$fc $fc && cp $fc /tmp/feeds.bak
+          ((! REBUILD)) && ./scripts/feeds list -fs > /tmp/feeds.prev 2>/dev/null && mv /tmp/feeds.prev $fc
+          rm -rf feeds/* 2>/dev/null; ./scripts/feeds update -a >/dev/null; ./scripts/feeds install -a
+          [ -f /tmp/feeds.bak ] && mv /tmp/feeds.bak $fc
+          cp $bp/config.diff .config
+          echo "=== Resetting working tree to clean state ==="
+          git checkout -- . 2>/dev/null || true
+          git clean -fd 2>/dev/null || true
+          echo "=== Applying patches (errors will NOT be silently ignored) ==="
+          for p in $bp/patches/*.patch; do
+            [ -f "$p" ] || continue
+            echo "--- Applying: $p ---"
+            patch -d . -p0 --forward < "$p" || { echo "::error::Patch $p FAILED to apply"; exit 1; }
+          done
+          echo "=== All patches applied successfully ==="
+          [ -e $bp/files ] && cp -r $bp/files/ .
+          [ -f $bp/custom.sh ] && bash $bp/custom.sh
+          make defconfig; cat $bp/cvn.config >> .config
+          ln -sf /dlcache dl 2>/dev/null
+          find /dlcache -type f -mmin +720 -delete 2>/dev/null || true
+          make download -j8
+        '
+
+    - name: Compile OpenWrt
+      run: |
+        for mode in c s; do
+          if docker_exec -e MODE=$mode $CID bash -c '
+            [ -f $DK_PROFILE/pre_compile.sh ] && bash $DK_PROFILE/pre_compile.sh
+            cd $DK_OPENWRT
+            export FORCE_UNSAFE_CONFIGURE=1
+            make -j$(($(nproc) + 1)) V=$MODE
+          '; then
+            break
+          fi
+          if [[ $mode == s ]]; then
+            exit 1
+          fi
+        done
+
+    - name: Verify firmware was built
+      run: |
+        echo "=== Checking for built firmware files ==="
+        docker_exec $CID bash -c '
+          cd $DK_OPENWRT
+          echo "Files in bin/targets:"
+          find bin/targets/ -type f -name "*.itb" 2>/dev/null || echo "(no .itb files found)"
+          echo ""
+          echo "Looking for xr1710g sysupgrade:"
+          find bin/targets/ -name "*xr1710g*sysupgrade*" 2>/dev/null || echo "(no xr1710g sysupgrade found)"
+        '
+        if ! find openwrt_bin/targets/ -name "*xr1710g*sysupgrade*" 2>/dev/null | grep -q .; then
+          echo "::error::No XR1710G sysupgrade firmware was built! Check patch application logs."
+          exit 1
+        fi
+        echo "✅ XR1710G firmware found!"
+
+    - name: Create release
+      run: |
+        sudo chown -R "$(id -u):$(id -g)" openwrt_bin
+        find -L openwrt_bin/targets/*/* -maxdepth 1 -type f -exec install -D -t firmware {} +
+        VERSION="${{ matrix.target }}_$(date +'%Y.%m.%d')_$(jq -r '.version_code' firmware/profiles.json)"
+        sed -i "s/^/    /; 1s/^/## $VERSION\n\n/" openwrt_bin/build_info
+        gh release list --json tagName --jq '.[].tagName' | grep "^${{ matrix.target }}_" | xargs -r gh release delete --cleanup-tag -y || true
+        gh release create $VERSION firmware/*sysupgrade.itb --title $VERSION --notes-file openwrt_bin/build_info
+
+    - name: Upload builder container
+      if: success()
+      run: |
+        docker_exec $CID bash -c 'cd $DK_OPENWRT && make clean && rm -rf feeds/* tmp/* && find dl -type f -mtime +30 -delete'
+        docker commit -a openwrt-fastbuild -m "Building at $(date)" $CID $IMG_INC
+        docker container rm -fv $CID
+        docker system prune -f --volumes
+        docker push $IMG_INC
+        if ((REBUILD)); then docker buildx imagetools create -t $IMG_BASE $IMG_INC; fi
+
+    - name: Delete old caches
+      if: always()
+      run: |
+        gh cache delete dlcache || true
+        gh cache delete ccache-${{ matrix.target }} || true
+
+    - name: Save dlcache
+      uses: actions/cache/save@v5
+      if: always()
+      with: {path: dlcache, key: dlcache}
+
+    - name: Save ghcache
+      uses: actions/cache/save@v5
+      if: always()
+      with: {path: ghcache, key: 'ccache-${{ matrix.target }}'}
