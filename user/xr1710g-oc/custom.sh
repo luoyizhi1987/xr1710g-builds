@@ -29,21 +29,9 @@ echo "=== [custom.sh] Done ==="
 
 echo "=== [custom.sh] Adding regmap kernel config ==="
 
-# 自动找到内核配置文件
-KERNEL_CONFIG=$(find target/linux/airoha -name "config-*" | head -1)
+echo "=== [custom.sh] Adding regmap kernel config ==="
+echo "CONFIG_REGMAP=y" >> target/linux/airoha/an7581/config-6.18
+echo "CONFIG_REGMAP_I2C=m" >> target/linux/airoha/an7581/config-6.18
+echo "CONFIG_REGMAP_SPI=m" >> target/linux/airoha/an7581/config-6.18
 
-if [ -n "$KERNEL_CONFIG" ] && [ -f "$KERNEL_CONFIG" ]; then
-    echo "Found kernel config: $KERNEL_CONFIG"
-    
-    # 检查是否已经添加过，避免重复
-    if ! grep -q "CONFIG_REGMAP=y" "$KERNEL_CONFIG"; then
-        echo "CONFIG_REGMAP=y" >> "$KERNEL_CONFIG"
-        echo "CONFIG_REGMAP_I2C=m" >> "$KERNEL_CONFIG"
-        echo "CONFIG_REGMAP_SPI=m" >> "$KERNEL_CONFIG"
-        echo "=== [custom.sh] regmap config added ==="
-    else
-        echo "=== [custom.sh] regmap config already exists, skipping ==="
-    fi
-else
-    echo "=== [custom.sh] WARNING: Kernel config file not found ==="
-fi
+echo "=== [custom.sh] Done ==="
