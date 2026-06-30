@@ -16,7 +16,7 @@ permissions: {contents: write, packages: write, actions: write}
 env:
   GH_TOKEN: ${{ github.token }}
   CID: ${{ github.event.repository.name }}
-  GH_PAGES: https://luoyizhi1987.github.io/xr1710g-builds/
+  GH_PAGES: https://w1700k.github.io/builds/
   BLDROOT: ghcr.io/w1700k/fastbuild_base:debian-arm
   DK_OPENWRT: /home/builder/openwrt
   DK_BIN: /home/builder/openwrt_bin
