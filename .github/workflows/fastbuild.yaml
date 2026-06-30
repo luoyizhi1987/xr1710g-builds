@@ -146,6 +146,11 @@ jobs:
           for p in $bp/patches/*.patch; do
             [ -f "$p" ] || continue
             echo "--- Applying: $p ---"
+            # Remove existing target file for new-file patches to avoid patch failure
+            target=$(head -2 "$p" | grep '^+++ ' | sed 's|^+++ [ab]/||;s|^+++ ||')
+            if sed -n '3p' "$p" | grep -q '^@@ -0,0'; then
+              rm -f "$target"
+            fi
             patch -d . -p0 --forward < "$p" || { echo "::error::Patch $p FAILED to apply"; exit 1; }
           done
           echo "=== All patches applied successfully ==="
