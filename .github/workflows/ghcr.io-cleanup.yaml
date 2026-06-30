@@ -11,5 +11,5 @@ jobs:
     steps:
       - uses: dataaxiom/ghcr-cleanup-action@v1.2.2
         with:
-          owner: w1700k
+          owner: ${{ github.repository_owner }}
           packages: builds
