@@ -1,5 +1,7 @@
 name: fastbuild xr1710g-oc
 on:
+  schedule:
+    - cron: '0 2 * * *'    # 每天 UTC 02:00 (北京时间 10:00) 自动编译
   workflow_dispatch:
     inputs:
       force_rebuild:
@@ -14,7 +16,7 @@ permissions: {contents: write, packages: write, actions: write}
 env:
   GH_TOKEN: ${{ github.token }}
   CID: ${{ github.event.repository.name }}
-  GH_PAGES: https://w1700k.github.io/builds/
+  GH_PAGES: https://luoyizhi1987.github.io/xr1710g-builds/
   BLDROOT: ghcr.io/w1700k/fastbuild_base:debian-arm
   DK_OPENWRT: /home/builder/openwrt
   DK_BIN: /home/builder/openwrt_bin
@@ -73,10 +75,7 @@ jobs:
         gh cache delete dlcache || true
         gh cache delete ccache-${{ matrix.target }} || true
         echo "=== Cleaning up old Docker images ==="
-        # Remove old local Docker images
         docker images --format '{{.Repository}}:{{.Tag}}' | grep '${{ matrix.target }}' | xargs -r docker rmi -f 2>/dev/null || true
-        # Delete old ghcr.io package versions (keep latest 2)
-        PKG="ghcr.io/${{ github.repository_owner }}/$CID"
         echo "Old images cleaned up"
 
     - name: Prepare builder container
@@ -84,7 +83,7 @@ jobs:
         IMG_BASE="ghcr.io/${{ github.repository_owner }}/$CID:${{ matrix.target }}"
         IMG_INC="$IMG_BASE-inc"
         FORCE_REBUILD="${{ github.event.inputs.force_rebuild }}"
-        echo "force_rebuild input: $FORCE_REBUILD"
+        # 定时触发时默认使用缓存加速，手动触发时默认强制重建
         if [ "$FORCE_REBUILD" = "true" ]; then
           REBUILD=1; IMAGE=$BLDROOT
           echo "=== force_rebuild=true: Using fresh base image ==="
@@ -121,7 +120,8 @@ jobs:
             git init
           fi
           git remote set-url origin $REPO_URL 2>/dev/null || git remote add origin $REPO_URL
-          git fetch
+          echo "=== Syncing upstream: $REPO_URL $REPO_BRANCH ==="
+          git fetch origin
           git checkout -- . 2>/dev/null || true
           git clean -fd 2>/dev/null || true
           git checkout $REPO_BRANCH
@@ -194,11 +194,9 @@ jobs:
         sudo chown -R "$(id -u):$(id -g)" openwrt_bin
         find -L openwrt_bin/targets/*/* -maxdepth 1 -type f -exec install -D -t firmware {} +
         VERSION="${{ matrix.target }}_$(date +'%Y.%m.%d')_$(jq -r '.version_code' firmware/profiles.json)"
-        # 确保 build_info 文件存在（兜底）
-        if [ ! -f openwrt_bin/build_info ]; then
-            echo "xr1710g-oc custom build" > openwrt_bin/build_info
-        fi
+        [ -f openwrt_bin/build_info ] || echo "xr1710g-oc daily build" > openwrt_bin/build_info
         sed -i "s/^/    /; 1s/^/## $VERSION\n\n/" openwrt_bin/build_info
+        # 删除旧 release，只保留最新
         gh release list --json tagName --jq '.[].tagName' | grep "^${{ matrix.target }}_" | xargs -r gh release delete --cleanup-tag -y || true
         gh release create $VERSION firmware/*sysupgrade.itb --title $VERSION --notes-file openwrt_bin/build_info
 
