@@ -1,6 +1,6 @@
 --- target/linux/airoha/dts/an7581-xr1710g-ubi.dts
 +++ target/linux/airoha/dts/an7581-xr1710g-ubi.dts
-@@ -0,0 +1,434 @@
+@@ -0,0 +1,436 @@
 +// SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
 +// Based on YYH2913's xr1710g-6.18 branch (2026-05-09 "New layout")
 +// Hardware: Econet EN7581 + RTL8261BE x2 + MT7996AV WiFi7
