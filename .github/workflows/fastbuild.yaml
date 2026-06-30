@@ -69,7 +69,7 @@ jobs:
         df -h /
 
     - name: Cleanup old caches and images
-      if: github.event.inputs.force_rebuild == 'true'
+      if: github.event.inputs.force_rebuild == 'true' || github.event_name == 'schedule'
       run: |
         echo "=== Cleaning up old caches ==="
         gh cache delete dlcache || true
@@ -82,8 +82,9 @@ jobs:
       run: |
         IMG_BASE="ghcr.io/${{ github.repository_owner }}/$CID:${{ matrix.target }}"
         IMG_INC="$IMG_BASE-inc"
+        # 定时触发和手动触发默认都强制重建
         FORCE_REBUILD="${{ github.event.inputs.force_rebuild }}"
-        # 定时触发时默认使用缓存加速，手动触发时默认强制重建
+        if [ "${{ github.event_name }}" = "schedule" ]; then FORCE_REBUILD="true"; fi
         if [ "$FORCE_REBUILD" = "true" ]; then
           REBUILD=1; IMAGE=$BLDROOT
           echo "=== force_rebuild=true: Using fresh base image ==="
