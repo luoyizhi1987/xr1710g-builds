@@ -23,6 +23,8 @@ echo "=== [custom.sh] luci-theme-argon installed ==="
 # ============================================================
 # Add SONiC Full Cone NAT (NAT1)
 # Source: https://github.com/mufeng05/openwrt-sonic-fullcone
+# All patches included: kernel + iptables + libnftnl + nftables
+# + firewall4 + LuCI
 # ============================================================
 echo "=== [custom.sh] Adding SONiC Full Cone NAT ==="
 rm -rf /tmp/sonic-fullcone
@@ -36,6 +38,14 @@ cp /tmp/sonic-fullcone/kernel/986-add-sonic-fullcone-to-nft.patch target/linux/g
 # iptables patch
 mkdir -p package/network/utils/iptables/patches
 cp /tmp/sonic-fullcone/patches/iptables/901-sonic-fullcone.patch package/network/utils/iptables/patches/
+
+# libnftnl patch
+mkdir -p package/libs/libnftnl/patches
+cp /tmp/sonic-fullcone/patches/libnftnl/001-libnftnl-add-fullcone-expression-support.patch package/libs/libnftnl/patches/
+
+# nftables patch
+mkdir -p package/network/utils/nftables/patches
+cp /tmp/sonic-fullcone/patches/nftables/002-nftables-add-fullcone-expression-support.patch package/network/utils/nftables/patches/
 
 # firewall4 patch
 mkdir -p package/network/config/firewall4/patches
@@ -51,6 +61,25 @@ if [ -d feeds/luci/applications/luci-app-firewall ]; then
 fi
 rm -rf /tmp/sonic-fullcone
 echo "=== [custom.sh] SONiC Full Cone NAT installed ==="
+
+# ============================================================
+# Fix libnftnl automake issue
+# The libnftnl patch modifies src/Makefile.am, which triggers
+# automake to regenerate Makefile.in. We need to add a post-patch
+# hook that touches Makefile.in to prevent regeneration.
+# ============================================================
+echo "=== [custom.sh] Fixing libnftnl automake issue ==="
+cat >> package/libs/libnftnl/Makefile << 'MAKEEOF'
+
+define Build/Prepare
+	$(call Build/Prepare/Default)
+	touch $(PKG_BUILD_DIR)/Makefile.in
+	touch $(PKG_BUILD_DIR)/src/Makefile.in
+	touch $(PKG_BUILD_DIR)/configure
+	touch $(PKG_BUILD_DIR)/aclocal.m4
+endef
+MAKEEOF
+echo "=== [custom.sh] libnftnl automake fix applied ==="
 
 # ============================================================
 # Set Argon as default theme
