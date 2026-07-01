@@ -1,6 +1,6 @@
 #!/bin/bash
 # custom.sh - XR1710G OC build customizations
-# Runs AFTER patches, BEFORE make defconfig
+# Runs AFTER patches and feeds install, BEFORE make defconfig
 
 set -e
 
@@ -23,52 +23,22 @@ echo "=== [custom.sh] luci-theme-argon installed ==="
 # ============================================================
 # Add SONiC Full Cone NAT (NAT1)
 # Source: https://github.com/mufeng05/openwrt-sonic-fullcone
-# All patches included: kernel + iptables + libnftnl + nftables
-# + firewall4 + LuCI
+# Using the official add_sonic_fullcone.sh script as-is
 # ============================================================
-echo "=== [custom.sh] Adding SONiC Full Cone NAT ==="
-rm -rf /tmp/sonic-fullcone
-git clone --depth 1 https://github.com/mufeng05/openwrt-sonic-fullcone.git /tmp/sonic-fullcone
-
-# Kernel patches
-cp /tmp/sonic-fullcone/kernel/984-add-sonic-fullcone-support.patch target/linux/generic/hack-6.18/
-cp /tmp/sonic-fullcone/kernel/985-add-sonic-fullcone-to-ipt.patch target/linux/generic/hack-6.18/
-cp /tmp/sonic-fullcone/kernel/986-add-sonic-fullcone-to-nft.patch target/linux/generic/hack-6.18/
-
-# iptables patch
-mkdir -p package/network/utils/iptables/patches
-cp /tmp/sonic-fullcone/patches/iptables/901-sonic-fullcone.patch package/network/utils/iptables/patches/
-
-# libnftnl patch
-mkdir -p package/libs/libnftnl/patches
-cp /tmp/sonic-fullcone/patches/libnftnl/001-libnftnl-add-fullcone-expression-support.patch package/libs/libnftnl/patches/
-
-# nftables patch
-mkdir -p package/network/utils/nftables/patches
-cp /tmp/sonic-fullcone/patches/nftables/002-nftables-add-fullcone-expression-support.patch package/network/utils/nftables/patches/
-
-# firewall4 patch
-mkdir -p package/network/config/firewall4/patches
-cp /tmp/sonic-fullcone/firewall/firewall4/001-sonic-fullcone.patch package/network/config/firewall4/patches/
-
-# LuCI firewall patch
-if [ -d feeds/luci/applications/luci-app-firewall ]; then
-  mkdir -p feeds/luci/applications/luci-app-firewall/patches
-  cp /tmp/sonic-fullcone/patches/luci-app-firewall/001-add-fullcone-options.patch feeds/luci/applications/luci-app-firewall/patches/
-  if [ -f feeds/luci/applications/luci-app-firewall/po/zh_Hans/firewall.po ]; then
-    cat /tmp/sonic-fullcone/translations/zh_Hans.po >> feeds/luci/applications/luci-app-firewall/po/zh_Hans/firewall.po
-  fi
-fi
-rm -rf /tmp/sonic-fullcone
+echo "=== [custom.sh] Adding SONiC Full Cone NAT (official script) ==="
+curl -sSL https://raw.githubusercontent.com/mufeng05/openwrt-sonic-fullcone/master/add_sonic_fullcone.sh | bash
 echo "=== [custom.sh] SONiC Full Cone NAT installed ==="
 
 # ============================================================
-# Fix libnftnl automake issue
-# The libnftnl patch modifies src/Makefile.am, which triggers
-# automake to regenerate Makefile.in. We need to add a post-patch
-# hook that touches Makefile.in to prevent regeneration.
+# Fix libnftnl automake regeneration issue
+# The libnftnl fullcone patch modifies src/Makefile.am.
+# Since libnftnl ships as a tarball with pre-generated Makefile.in,
+# modifying Makefile.am triggers automake to regenerate Makefile.in.
+# The build container's automake version may not match, causing failure.
+# Fix: touch all autotools-generated files after patching to prevent
+# regeneration.
 # ============================================================
-echo "=== [custom.sh] Fixing libnftnl automake issue ==="
+echo "=== [custom.sh] Fixing libnftnl automake regeneration ==="
 cat >> package/libs/libnftnl/Makefile << 'MAKEEOF'
 
 define Build/Prepare
