@@ -1,6 +1,6 @@
 --- target/linux/airoha/dts/an7581-xr1710g-ubi.dts
 +++ target/linux/airoha/dts/an7581-xr1710g-ubi.dts
-@@ -0,0 +1,445 @@
+@@ -0,0 +1,430 @@
 +// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
 +
 +/dts-v1/;
@@ -8,9 +8,7 @@
 +#include <dt-bindings/leds/common.h>
 +#include <dt-bindings/gpio/gpio.h>
 +#include <dt-bindings/input/input.h>
-+#include <dt-bindings/phy/phy.h>
 +#include "an7581.dtsi"
-+#include "an7581-npu-mt7996.dtsi"
 +
 +/ {
 +	model = "XR1710G";
@@ -320,14 +318,9 @@
 +	nvmem-cell-names = "mac-address";
 +};
 +
-+&pon_pcs {
-+	status = "okay";
-+};
-+
 +&gdm2 {
 +	status = "okay";
 +
-+	managed = "in-band-status";
 +	phy-handle = <&phy8>;
 +	phy-mode = "usxgmii";
 +
@@ -336,14 +329,10 @@
 +	openwrt,netdev-name = "wan";
 +};
 +
-+&eth_pcs {
-+	status = "okay";
-+};
-+
 +&gdm4 {
 +	status = "okay";
++	airoha,lan-port;
 +
-+	managed = "in-band-status";
 +	phy-handle = <&phy5>;
 +	phy-mode = "usxgmii";
 +
@@ -365,10 +354,10 @@
 +			reset-gpios = <&en7581_pinctrl 46 GPIO_ACTIVE_LOW>;
 +			reset-assert-us = <200000>;
 +			reset-deassert-us = <200000>;
-+			// interrupt-parent = <&en7581_pinctrl>;
-+			// interrupts = <22 IRQ_TYPE_LEVEL_LOW>;
-+			tx-polarity = <PHY_POL_INVERT>;
-+			rx-polarity = <PHY_POL_INVERT>;
++			interrupt-parent = <&en7581_pinctrl>;
++			interrupts = <22 IRQ_TYPE_LEVEL_LOW>;
++			realtek,pnswap-tx;
++			realtek,pnswap-rx;
 +		};
 +
 +		phy8: ethernet-phy@8 {
@@ -377,10 +366,10 @@
 +			reset-gpios = <&en7581_pinctrl 31 GPIO_ACTIVE_LOW>;
 +			reset-assert-us = <200000>;
 +			reset-deassert-us = <200000>;
-+			// interrupt-parent = <&en7581_pinctrl>;
-+			// interrupts = <23 IRQ_TYPE_LEVEL_LOW>;
-+			tx-polarity = <PHY_POL_INVERT>;
-+			rx-polarity = <PHY_POL_INVERT>;
++			interrupt-parent = <&en7581_pinctrl>;
++			interrupts = <23 IRQ_TYPE_LEVEL_LOW>;
++			realtek,pnswap-tx;
++			realtek,pnswap-rx;
 +		};
 +	};
 +};
