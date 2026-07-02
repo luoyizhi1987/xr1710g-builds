@@ -153,7 +153,25 @@ jobs:
             fi
             patch -d . -p0 --forward < "$p" || { echo "::error::Patch $p FAILED to apply"; exit 1; }
           done
-          echo "=== All patches applied successfully ==="
+          echo "=== All user patches applied successfully ==="
+          # Apply kernel patches (placed in target/linux/airoha/patches-6.18/)
+          if [ -d $bp/kernel-patches ] && ls $bp/kernel-patches/*.patch >/dev/null 2>&1; then
+            kdir=target/linux/airoha/patches-6.18
+            echo "=== Copying kernel patches to $kdir ==="
+            mkdir -p $kdir
+            for kp in $bp/kernel-patches/*.patch; do
+              [ -f "$kp" ] || continue
+              kname=$(basename "$kp")
+              # Check if a patch with the same name already exists
+              if [ -f "$kdir/$kname" ]; then
+                echo "--- Replacing existing kernel patch: $kname ---"
+              else
+                echo "--- Adding kernel patch: $kname ---"
+              fi
+              cp "$kp" "$kdir/$kname"
+            done
+            echo "=== Kernel patches installed ==="
+          fi
           [ -e $bp/files ] && cp -r $bp/files/ .
           [ -f $bp/custom.sh ] && bash $bp/custom.sh
           make defconfig; cat $bp/cvn.config >> .config
